@@ -186,6 +186,180 @@ static int xeddsa_verify(unsigned char *pk, unsigned char *sm, unsigned char *M,
 }
 
 /*
+ * draft-irtf-cfrg-ristretto255-decaf448 section 4.2
+ */
+static int sqrt_ratio_m1(fe h, fe u, fe v)
+{
+    fe v3, check, r, a;
+    int squared;
+
+    /* r = (u * v^3) * (u * v^7)^((p-5)/8) */
+    fe_sq(v3, v);
+    fe_mul(v3, v3, v);			/* v3 = v^3 */
+    fe_sq(r, v3);
+    fe_mul(r, r, v);
+    fe_mul(r, r, u);			/* r = uv^7 */
+
+    fe_pow22523(r, r);			/* r = (uv^7)^((q-5)/8) */
+    fe_mul(r, r, v3);
+    fe_mul(r, r, u);			/* r = uv^3(uv^7)^((q-5)/8) */
+
+    /* check = v * r^2 */
+    fe_sq(check, r);
+    fe_mul(check, check, v);
+
+    squared = 1;
+    fe_sub(a, check, u);
+    if (fe_isnonzero(a)) {		/* check != u */
+	fe_add(a, check, u);
+	if (fe_isnonzero(a)) {		/* check != -u */
+	    squared = 0;
+	    fe_mul(a, u, sqrtm1);
+	    fe_add(a, check, a);
+	    if (!fe_isnonzero(a)) {	/* check == -u * SQRTM1 */
+		fe_mul(r, r, sqrtm1);
+	    }
+	} else {			/* check == -u */
+	    fe_mul(r, r, sqrtm1);
+	}
+    } else {				/* check == u */
+	fe_mul(a, u, sqrtm1);
+	fe_add(a, check, a);
+	if (!fe_isnonzero(a)) {		/* check == -u * SQRTM1 */
+	    fe_mul(r, r, sqrtm1);
+	}
+    }
+
+    if (fe_isnegative(r)) {
+	fe_neg(r, r);
+    }
+
+    fe_copy(h, r);
+    return squared;
+}
+
+/*
+ * draft-irtf-cfrg-ristretto255-decaf448 section 4.3.1
+ */
+static int decode(ge_p3 *h, const unsigned char *E)
+{
+    int i;
+    fe s, a, one, u1, u2, v;
+
+    if (E[31] > '\x7f') {
+	return 0;			/* > p */
+    } else if (E[31] == '\x7f') {
+	for (i = 31; E[--i] == '\xff'; ) {
+	    if (i == 1) {
+		if (E[0] >= '\xed') {
+		    return 0;		/* > p */
+		}
+		break;
+	    }
+	}
+    }
+    fe_frombytes(s, E);
+    if (fe_isnegative(s)) {
+	return 0;			/* non-canonical */
+    }
+
+    fe_sq(a, s);			/* ss = s^2 */
+    fe_1(one);
+    fe_sub(u1, one, a);			/* u1 = 1 - ss */
+    fe_add(u2, one, a);			/* u2 = 1 + ss */
+    fe_sq(a, u2);			/* u2_sqr = u2^2 */
+
+    /* v = -(D * u1^2) - u2_sqr */
+    fe_sq(v, u1);
+    fe_mul(v, v, d);
+    fe_neg(v, v);
+    fe_sub(v, v, a);
+
+    /* (was_square, invsqrt) = SQRT_RATIO_M1(1, v * u2_sqr) */
+    fe_mul(a, v, a);
+    if (!sqrt_ratio_m1(a, one, a)) {
+	return 0;
+    }
+
+    fe_mul(h->X, a, u2);		/* den_x = invsqrt * u2 */
+    fe_mul(h->Y, h->X, v);		/* den_y = invsqrt * den_x * v */
+    fe_mul(h->Y, a, h->Y);
+
+    /* x = CT_ABS(2 * s * den_x) */
+    fe_mul(a, s, h->X);
+    fe_add(h->X, a, a);
+    if (fe_isnegative(h->X)) {
+	fe_neg(h->X, h->X);
+    }
+
+    fe_mul(h->Y, u1, h->Y);		/* y = u1 * den_y */
+    fe_1(h->Z);				/* z = 1 */
+    fe_mul(h->T, h->X, h->Y);		/* t = x * y */
+
+    return (!fe_isnegative(h->T));
+}
+
+static const fe invsqrta_d = {
+    6111485, 4156064, -27798727, 12243468, -25904040,
+    120897, 20826367, -7060776, 6093568, -1986012
+};
+
+/*
+ * draft-irtf-cfrg-ristretto255-decaf448 section 4.3.2
+ */
+static void encode(unsigned char *s, const ge_p3 *h)
+{
+    fe a, u1, u2, one, z_inv, x, y;
+
+    /* u1 = (z0 + y0) * (z0 - y0) */
+    fe_add(u1, h->Z, h->Y);
+    fe_sub(a, h->Z, h->Y);
+    fe_mul(u1, u1, a);
+
+    fe_mul(u2, h->X, h->Y);		/* u2 = x0 * y0 */
+
+    /* (_, invsqrt) = SQRT_RATIO_M1(1, u1 * u2^2) */
+    fe_sq(a, u2);
+    fe_mul(a, u1, a);
+    fe_1(one);
+    sqrt_ratio_m1(a, one, a);
+
+    fe_mul(u1, a, u1);			/* den1 = invsqrt * u1 */
+    fe_mul(u2, a, u2);			/* den2 = invsqrt * u2 */
+
+    /* z_inv = den1 * den2 * t0 */
+    fe_mul(z_inv, u1, u2);
+    fe_mul(z_inv, z_inv, h->T);
+
+    /* rotate = IS_NEGATIVE(t0 * z_inv) */
+    fe_mul(a, h->T, z_inv);
+    if (fe_isnegative(a)) {
+	fe_mul(x, h->Y, sqrtm1);	/* x = y0 * SQRT_M1 */
+	fe_mul(y, h->X, sqrtm1);	/* y = x0 * SQRT_M1 */
+	fe_mul(u2, u1, invsqrta_d);	/* den_inv = den1 * INVSQRT_A_MINUS_D */
+    } else {
+	fe_copy(x, h->X);		/* x = x0 */
+	fe_copy(y, h->Y);		/* y = y0 */
+					/* den_inv = den2 */
+    }
+
+    /* y = CT_SELECT(-y IF IS_NEGATIVE(x * z_inv) ELSE y) */
+    fe_mul(a, x, z_inv);
+    if (fe_isnegative(a)) {
+	fe_neg(y, y);
+    }
+
+    /* s = CT_ABS(den_inv * (z - y)) */
+    fe_sub(a, h->Z, y);
+    fe_mul(a, u2, a);
+    if (fe_isnegative(a)) {
+	fe_neg(a, a);
+    }
+    fe_tobytes(s, a);
+}
+
+
+/*
  * compute Ed25519 signature with X25519 key
  */
 static void xed25519_sign(LPC_frame f, int nargs, LPC_value retval)
@@ -269,6 +443,6 @@ static LPC_ext_kfun kf[] = {
 
 int lpc_ext_init(int major, int minor, const char *config)
 {
-    lpc_ext_kfun(kf, 2);
+    lpc_ext_kfun(kf, sizeof(kf) / sizeof(LPC_ext_kfun));
     return 1;
 }
