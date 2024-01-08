@@ -431,14 +431,108 @@ static void xed25519_verify(LPC_frame f, int nargs, LPC_value retval)
 				 lpc_string_length(message)));
 }
 
+/*
+ * string ristretto255_add(string r1, string r2)
+ */
+static void r255_add(LPC_frame f, int nargs, LPC_value retval)
+{
+    unsigned char buffer[32];
+    LPC_value arg;
+    LPC_string a, b;
+    ge_p3 A, B;
+    ge_cached C;
+    ge_p1p1 P;
+
+    arg = lpc_frame_arg(f, nargs, 0);
+    a = lpc_string_getval(arg);
+    if (lpc_string_length(a) != 32 || !decode(&A, lpc_string_text(a))) {
+	lpc_runtime_error(f, "Bad argument 1 for kfun ristretto255_add");
+    }
+    arg = lpc_frame_arg(f, nargs, 1);
+    b = lpc_string_getval(arg);
+    if (lpc_string_length(b) != 32 || !decode(&B, lpc_string_text(b))) {
+	lpc_runtime_error(f, "Bad argument 2 for kfun ristretto255_add");
+    }
+
+    ge_p3_to_cached(&C, &B);
+    ge_add(&P, &A, &C);
+    ge_p1p1_to_p3(&A, &P);
+    encode(buffer, &A);
+
+    lpc_string_putval(retval,
+		      lpc_string_new(lpc_frame_dataspace(f), buffer, 32));
+}
+
+/*
+ * string ristretto255_sub(string r1, string r2)
+ */
+static void r255_sub(LPC_frame f, int nargs, LPC_value retval)
+{
+    unsigned char buffer[32];
+    LPC_value arg;
+    LPC_string a, b;
+    ge_p3 A, B;
+    ge_cached C;
+    ge_p1p1 P;
+
+    arg = lpc_frame_arg(f, nargs, 0);
+    a = lpc_string_getval(arg);
+    if (lpc_string_length(a) != 32 || !decode(&A, lpc_string_text(a))) {
+	lpc_runtime_error(f, "Bad argument 1 for kfun ristretto255_sub");
+    }
+    arg = lpc_frame_arg(f, nargs, 1);
+    b = lpc_string_getval(arg);
+    if (lpc_string_length(b) != 32 || !decode(&B, lpc_string_text(b))) {
+	lpc_runtime_error(f, "Bad argument 2 for kfun ristretto255_sub");
+    }
+
+    ge_p3_to_cached(&C, &B);
+    ge_sub(&P, &A, &C);
+    ge_p1p1_to_p3(&A, &P);
+    encode(buffer, &A);
+
+    lpc_string_putval(retval,
+		      lpc_string_new(lpc_frame_dataspace(f), buffer, 32));
+}
+
+/*
+ * string ristretto255_neg(string r)
+ */
+static void r255_neg(LPC_frame f, int nargs, LPC_value retval)
+{
+    unsigned char buffer[32];
+    LPC_value arg;
+    LPC_string a;
+    ge_p3 A;
+
+    arg = lpc_frame_arg(f, nargs, 0);
+    a = lpc_string_getval(arg);
+    if (lpc_string_length(a) != 32 || !decode(&A, lpc_string_text(a))) {
+	lpc_runtime_error(f, "Bad argument 1 for kfun ristretto255_neg");
+    }
+
+    fe_neg(A.X, A.X);
+    fe_neg(A.T, A.T);
+    encode(buffer, &A);
+
+    lpc_string_putval(retval,
+		      lpc_string_new(lpc_frame_dataspace(f), buffer, 32));
+}
+
 static char xed25519_sign_proto[] = { LPC_TYPE_STRING, LPC_TYPE_STRING,
 				      LPC_TYPE_STRING, 0 };
 static char xed25519_verify_proto[] = { LPC_TYPE_INT, LPC_TYPE_STRING,
 				        LPC_TYPE_STRING, LPC_TYPE_STRING, 0 };
+static char r255_bin_proto[] = { LPC_TYPE_STRING, LPC_TYPE_STRING,
+				 LPC_TYPE_STRING, 0 };
+static char r255_mon_proto[] = { LPC_TYPE_STRING, LPC_TYPE_STRING, 0 };
 
 static LPC_ext_kfun kf[] = {
     { "encrypt XEd25519 sign", xed25519_sign_proto, xed25519_sign },
-    { "decrypt XEd25519 verify", xed25519_verify_proto, xed25519_verify }
+    { "decrypt XEd25519 verify", xed25519_verify_proto, xed25519_verify },
+    { "ristretto255_add", r255_bin_proto, r255_add },
+    { "ristretto255_sub", r255_bin_proto, r255_sub },
+    { "ristretto255_neg", r255_mon_proto, r255_neg }
 };
 
 int lpc_ext_init(int major, int minor, const char *config)
