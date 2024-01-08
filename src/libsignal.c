@@ -358,6 +358,58 @@ static void encode(unsigned char *s, const ge_p3 *h)
     fe_tobytes(s, a);
 }
 
+/*
+ * multiply a point by a scalar
+ */
+static void mult(ge_p3 *h, const ge_p3 *A, const unsigned char *s)
+{
+    ge_cached C[16];
+    ge_p3 B, D, E, F;
+    ge_p1p1 R;
+    ge_p2 S;
+    int i;
+
+    ge_p3_0(&B);				  ge_p3_to_cached(&C[0], &B);
+						  ge_p3_to_cached(&C[1], A);
+    ge_p3_dbl(&R, A);	   ge_p1p1_to_p3(&B, &R); ge_p3_to_cached(&C[2], &B);
+    ge_add(&R, A, &C[2]);  ge_p1p1_to_p3(&D, &R); ge_p3_to_cached(&C[3], &D);
+    ge_p3_dbl(&R, &B);	   ge_p1p1_to_p3(&B, &R); ge_p3_to_cached(&C[4], &B);
+    ge_add(&R, A, &C[4]);  ge_p1p1_to_p3(&E, &R); ge_p3_to_cached(&C[5], &E);
+    ge_p3_dbl(&R, &D);	   ge_p1p1_to_p3(&D, &R); ge_p3_to_cached(&C[6], &D);
+    ge_add(&R, A, &C[6]);  ge_p1p1_to_p3(&F, &R); ge_p3_to_cached(&C[7], &F);
+    ge_p3_dbl(&R, &B);	   ge_p1p1_to_p3(&B, &R); ge_p3_to_cached(&C[8], &B);
+    ge_add(&R, A, &C[8]);  ge_p1p1_to_p3(&B, &R); ge_p3_to_cached(&C[9], &B);
+    ge_p3_dbl(&R, &E);	   ge_p1p1_to_p3(&B, &R); ge_p3_to_cached(&C[10], &B);
+    ge_add(&R, A, &C[10]); ge_p1p1_to_p3(&B, &R); ge_p3_to_cached(&C[11], &B);
+    ge_p3_dbl(&R, &D);	   ge_p1p1_to_p3(&B, &R); ge_p3_to_cached(&C[12], &B);
+    ge_add(&R, A, &C[12]); ge_p1p1_to_p3(&B, &R); ge_p3_to_cached(&C[13], &B);
+    ge_p3_dbl(&R, &F);	   ge_p1p1_to_p3(&B, &R); ge_p3_to_cached(&C[14], &B);
+    ge_add(&R, A, &C[14]); ge_p1p1_to_p3(&B, &R); ge_p3_to_cached(&C[15], &B);
+
+    ge_p3_0(&B);
+    for (i = 31; i > 0; --i) {
+	ge_add(&R, &B, &C[s[i] >> 4]);	ge_p1p1_to_p2(&S, &R);
+	ge_p2_dbl(&R, &S);		ge_p1p1_to_p2(&S, &R);
+	ge_p2_dbl(&R, &S);		ge_p1p1_to_p2(&S, &R);
+	ge_p2_dbl(&R, &S);		ge_p1p1_to_p2(&S, &R);
+	ge_p2_dbl(&R, &S);		ge_p1p1_to_p3(&B, &R);
+
+	ge_add(&R, &B, &C[s[i] & 0xf]);	ge_p1p1_to_p2(&S, &R);
+	ge_p2_dbl(&R, &S);		ge_p1p1_to_p2(&S, &R);
+	ge_p2_dbl(&R, &S);		ge_p1p1_to_p2(&S, &R);
+	ge_p2_dbl(&R, &S);		ge_p1p1_to_p2(&S, &R);
+	ge_p2_dbl(&R, &S);		ge_p1p1_to_p3(&B, &R);
+    }
+
+    ge_add(&R, &B, &C[s[0] >> 4]);	ge_p1p1_to_p2(&S, &R);
+    ge_p2_dbl(&R, &S);			ge_p1p1_to_p2(&S, &R);
+    ge_p2_dbl(&R, &S);			ge_p1p1_to_p2(&S, &R);
+    ge_p2_dbl(&R, &S);			ge_p1p1_to_p2(&S, &R);
+    ge_p2_dbl(&R, &S);			ge_p1p1_to_p3(&B, &R);
+
+    ge_add(&R, &B, &C[s[0] & 0xf]);	ge_p1p1_to_p3(h, &R);
+}
+
 
 /*
  * compute Ed25519 signature with X25519 key
@@ -438,25 +490,25 @@ static void r255_add(LPC_frame f, int nargs, LPC_value retval)
 {
     unsigned char buffer[32];
     LPC_value arg;
-    LPC_string a, b;
+    LPC_string str;
     ge_p3 A, B;
     ge_cached C;
-    ge_p1p1 P;
+    ge_p1p1 R;
 
     arg = lpc_frame_arg(f, nargs, 0);
-    a = lpc_string_getval(arg);
-    if (lpc_string_length(a) != 32 || !decode(&A, lpc_string_text(a))) {
+    str = lpc_string_getval(arg);
+    if (lpc_string_length(str) != 32 || !decode(&A, lpc_string_text(str))) {
 	lpc_runtime_error(f, "Bad argument 1 for kfun ristretto255_add");
     }
     arg = lpc_frame_arg(f, nargs, 1);
-    b = lpc_string_getval(arg);
-    if (lpc_string_length(b) != 32 || !decode(&B, lpc_string_text(b))) {
+    str = lpc_string_getval(arg);
+    if (lpc_string_length(str) != 32 || !decode(&B, lpc_string_text(str))) {
 	lpc_runtime_error(f, "Bad argument 2 for kfun ristretto255_add");
     }
 
     ge_p3_to_cached(&C, &B);
-    ge_add(&P, &A, &C);
-    ge_p1p1_to_p3(&A, &P);
+    ge_add(&R, &A, &C);
+    ge_p1p1_to_p3(&A, &R);
     encode(buffer, &A);
 
     lpc_string_putval(retval,
@@ -470,25 +522,25 @@ static void r255_sub(LPC_frame f, int nargs, LPC_value retval)
 {
     unsigned char buffer[32];
     LPC_value arg;
-    LPC_string a, b;
+    LPC_string str;
     ge_p3 A, B;
     ge_cached C;
-    ge_p1p1 P;
+    ge_p1p1 R;
 
     arg = lpc_frame_arg(f, nargs, 0);
-    a = lpc_string_getval(arg);
-    if (lpc_string_length(a) != 32 || !decode(&A, lpc_string_text(a))) {
+    str = lpc_string_getval(arg);
+    if (lpc_string_length(str) != 32 || !decode(&A, lpc_string_text(str))) {
 	lpc_runtime_error(f, "Bad argument 1 for kfun ristretto255_sub");
     }
     arg = lpc_frame_arg(f, nargs, 1);
-    b = lpc_string_getval(arg);
-    if (lpc_string_length(b) != 32 || !decode(&B, lpc_string_text(b))) {
+    str = lpc_string_getval(arg);
+    if (lpc_string_length(str) != 32 || !decode(&B, lpc_string_text(str))) {
 	lpc_runtime_error(f, "Bad argument 2 for kfun ristretto255_sub");
     }
 
     ge_p3_to_cached(&C, &B);
-    ge_sub(&P, &A, &C);
-    ge_p1p1_to_p3(&A, &P);
+    ge_sub(&R, &A, &C);
+    ge_p1p1_to_p3(&A, &R);
     encode(buffer, &A);
 
     lpc_string_putval(retval,
@@ -502,17 +554,45 @@ static void r255_neg(LPC_frame f, int nargs, LPC_value retval)
 {
     unsigned char buffer[32];
     LPC_value arg;
-    LPC_string a;
+    LPC_string str;
     ge_p3 A;
 
     arg = lpc_frame_arg(f, nargs, 0);
-    a = lpc_string_getval(arg);
-    if (lpc_string_length(a) != 32 || !decode(&A, lpc_string_text(a))) {
+    str = lpc_string_getval(arg);
+    if (lpc_string_length(str) != 32 || !decode(&A, lpc_string_text(str))) {
 	lpc_runtime_error(f, "Bad argument 1 for kfun ristretto255_neg");
     }
 
     fe_neg(A.X, A.X);
     fe_neg(A.T, A.T);
+    encode(buffer, &A);
+
+    lpc_string_putval(retval,
+		      lpc_string_new(lpc_frame_dataspace(f), buffer, 32));
+}
+
+/*
+ * string ristretto255_mult(string r, string s)
+ */
+static void r255_mult(LPC_frame f, int nargs, LPC_value retval)
+{
+    unsigned char buffer[32];
+    LPC_value arg;
+    LPC_string str;
+    ge_p3 A;
+
+    arg = lpc_frame_arg(f, nargs, 0);
+    str = lpc_string_getval(arg);
+    if (lpc_string_length(str) != 32 || !decode(&A, lpc_string_text(str))) {
+	lpc_runtime_error(f, "Bad argument 1 for kfun ristretto255_mult");
+    }
+    arg = lpc_frame_arg(f, nargs, 1);
+    str = lpc_string_getval(arg);
+    if (lpc_string_length(str) != 32) {
+	lpc_runtime_error(f, "Bad argument 2 for kfun ristretto255_mult");
+    }
+
+    mult(&A, &A, lpc_string_text(str));
     encode(buffer, &A);
 
     lpc_string_putval(retval,
@@ -532,7 +612,8 @@ static LPC_ext_kfun kf[] = {
     { "decrypt XEd25519 verify", xed25519_verify_proto, xed25519_verify },
     { "ristretto255_add", r255_bin_proto, r255_add },
     { "ristretto255_sub", r255_bin_proto, r255_sub },
-    { "ristretto255_neg", r255_mon_proto, r255_neg }
+    { "ristretto255_neg", r255_mon_proto, r255_neg },
+    { "ristretto255_mult", r255_bin_proto, r255_mult }
 };
 
 int lpc_ext_init(int major, int minor, const char *config)
