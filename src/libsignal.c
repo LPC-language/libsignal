@@ -358,6 +358,77 @@ static void encode(unsigned char *s, const ge_p3 *h)
     fe_tobytes(s, a);
 }
 
+static const fe one_dsq = {
+    6275446, -16617371, -22938544, -3773710, 11667077,
+    7397348, -27922721, 1766195, -24433858, 672203
+};
+static const fe m1 = {
+    -1, 0, 0, 0, 0, 0, 0, 0, 0, 0
+};
+static const fe d_1sq = {
+    15551795, -11097455, -13425098, -10125071, -11896535,
+    10178284, -26634327, 4729244, -5282110, -10116402
+};
+static const fe sqrtad_1 = {
+    24849947, -153582, -23613485, 6347715, -21072328,
+    -667138, -25271143, -15367704, -870347, 14525639
+};
+
+/*
+ * draft-irtf-cfrg-ristretto255-decaf448 section 4.3.4
+ */
+static void elligator_map(ge_p3 *h, unsigned char *s)
+{
+    fe t, r, one, u, v, a, c, N;
+    ge_p1p1 R;
+
+    fe_frombytes(t, s);
+
+    /* r = SQRT_M1 * t^2 */
+    fe_sq(r, t);
+    fe_mul(r, sqrtm1, r);
+
+    /* u = (r + 1) * ONE_MINUS_D_SQ */
+    fe_1(one);
+    fe_add(u, r, one);
+    fe_mul(u, u, one_dsq);
+
+    /* v = (-1 - r*D) * (r + D) */
+    fe_mul(v, r, d);
+    fe_sub(v, m1, v);
+    fe_add(a, r, d);
+    fe_mul(v, v, a);
+
+    /* (was_square, s) = SQRT_RATIO_M1(u, v) */
+    if (sqrt_ratio_m1(a, u, v)) {
+	/* s = CT_SELECT(s IF was_square ELSE s_prime) */
+	/* c = CT_SELECT(-1 IF was_square ELSE r) */
+	fe_copy(c, m1);
+    } else {
+	/* s_prime = -CT_ABS(s*t) */
+	fe_mul(a, a, t);
+	if (!fe_isnegative(a)) {
+	    fe_neg(a, a);
+	}
+	fe_copy(c, r);
+    }
+
+    /* N = c * (r - 1) * D_MINUS_ONE_SQ - v */
+    fe_sub(N, r, one);
+    fe_mul(N, N, c);
+    fe_mul(N, N, d_1sq);
+    fe_sub(N, N, v);
+
+    fe_add(R.X, a, a);		/* w0 = 2 * s * v */
+    fe_mul(R.X, R.X, v);
+    fe_mul(R.Z, N, sqrtad_1);	/* w1 = N * SQRT_AD_MINUS_ONE */
+    fe_sq(a, a);		/* w2 = 1 - s^2 */
+    fe_sub(R.Y, one, a);
+    fe_add(R.T, one, a);	/* w3 = 1 + s^2 */
+
+    ge_p1p1_to_p3(h, &R);	/* (w0*w3, w2*w1, w1*w3, w0*w2) */
+}
+
 /*
  * multiply a point by a scalar
  */
@@ -599,6 +670,29 @@ static void r255_mult(LPC_frame f, int nargs, LPC_value retval)
 		      lpc_string_new(lpc_frame_dataspace(f), buffer, 32));
 }
 
+/*
+ * string ristretto255_map(string r)
+ */
+static void r255_map(LPC_frame f, int nargs, LPC_value retval)
+{
+    unsigned char buffer[32];
+    LPC_value arg;
+    LPC_string str;
+    ge_p3 A;
+
+    arg = lpc_frame_arg(f, nargs, 0);
+    str = lpc_string_getval(arg);
+    if (lpc_string_length(str) != 32) {
+	lpc_runtime_error(f, "Bad argument 1 for kfun ristretto255_map");
+    }
+
+    elligator_map(&A, lpc_string_text(str));
+    encode(buffer, &A);
+
+    lpc_string_putval(retval,
+		      lpc_string_new(lpc_frame_dataspace(f), buffer, 32));
+}
+
 static char xed25519_sign_proto[] = { LPC_TYPE_STRING, LPC_TYPE_STRING,
 				      LPC_TYPE_STRING, 0 };
 static char xed25519_verify_proto[] = { LPC_TYPE_INT, LPC_TYPE_STRING,
@@ -613,7 +707,8 @@ static LPC_ext_kfun kf[] = {
     { "ristretto255_add", r255_bin_proto, r255_add },
     { "ristretto255_sub", r255_bin_proto, r255_sub },
     { "ristretto255_neg", r255_mon_proto, r255_neg },
-    { "ristretto255_mult", r255_bin_proto, r255_mult }
+    { "ristretto255_mult", r255_bin_proto, r255_mult },
+    { "ristretto255_map", r255_mon_proto, r255_map }
 };
 
 int lpc_ext_init(int major, int minor, const char *config)
