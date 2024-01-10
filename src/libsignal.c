@@ -693,6 +693,17 @@ static void r255_map(LPC_frame f, int nargs, LPC_value retval)
 		      lpc_string_new(lpc_frame_dataspace(f), buffer, 32));
 }
 
+/*
+ * string ristretto255_identity()
+ */
+static void r255_identity(LPC_frame f, int nargs, LPC_value retval)
+{
+    static const char identity[32];	/* zeroes */
+
+    lpc_string_putval(retval,
+		      lpc_string_new(lpc_frame_dataspace(f), identity, 32));
+}
+
 static char xed25519_sign_proto[] = { LPC_TYPE_STRING, LPC_TYPE_STRING,
 				      LPC_TYPE_STRING, 0 };
 static char xed25519_verify_proto[] = { LPC_TYPE_INT, LPC_TYPE_STRING,
@@ -700,6 +711,7 @@ static char xed25519_verify_proto[] = { LPC_TYPE_INT, LPC_TYPE_STRING,
 static char r255_bin_proto[] = { LPC_TYPE_STRING, LPC_TYPE_STRING,
 				 LPC_TYPE_STRING, 0 };
 static char r255_mon_proto[] = { LPC_TYPE_STRING, LPC_TYPE_STRING, 0 };
+static char r255_identity_proto[] = { LPC_TYPE_STRING, 0 };
 
 static LPC_ext_kfun kf[] = {
     { "encrypt XEd25519 sign", xed25519_sign_proto, xed25519_sign },
@@ -708,7 +720,8 @@ static LPC_ext_kfun kf[] = {
     { "ristretto255_sub", r255_bin_proto, r255_sub },
     { "ristretto255_neg", r255_mon_proto, r255_neg },
     { "ristretto255_mult", r255_bin_proto, r255_mult },
-    { "ristretto255_map", r255_mon_proto, r255_map }
+    { "ristretto255_map", r255_mon_proto, r255_map },
+    { "ristretto255_identity", r255_identity_proto, r255_identity }
 };
 
 int lpc_ext_init(int major, int minor, const char *config)
