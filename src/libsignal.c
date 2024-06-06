@@ -541,6 +541,9 @@ static void xed25519_verify(LPC_frame f, int nargs, LPC_value retval)
 	lpc_runtime_error(f, "Bad argument 3 for kfun decrypt");
     }
     signature = lpc_string_getval(val);
+    if (lpc_string_length(signature) != 64) {
+	lpc_runtime_error(f, "Bad signature");
+    }
     val = lpc_frame_arg(f, nargs, 2);
     if (lpc_value_type(val) != LPC_TYPE_STRING) {
 	lpc_runtime_error(f, "Bad argument 4 for kfun decrypt");
