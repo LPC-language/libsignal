@@ -674,7 +674,7 @@ static void r255_mult(LPC_frame f, int nargs, LPC_value retval)
 }
 
 /*
- * string ristretto255_map(string r)
+ * string ristretto255_map(string str)
  */
 static void r255_map(LPC_frame f, int nargs, LPC_value retval)
 {
@@ -707,6 +707,23 @@ static void r255_identity(LPC_frame f, int nargs, LPC_value retval)
 		      lpc_string_new(lpc_frame_dataspace(f), identity, 32));
 }
 
+/*
+ * string ristretto255_basepoint()
+ *
+ * draft-irtf-cfrg-ristretto255-decaf448 section 4
+ */
+static void r255_basepoint(LPC_frame f, int nargs, LPC_value retval)
+{
+    static const char basepoint[] = {
+	0xe2, 0xf2, 0xae, 0x0a, 0x6a, 0xbc, 0x4e, 0x71, 0xa8, 0x84, 0xa9, 0x61,
+	0xc5, 0x00, 0x51, 0x5f, 0x58, 0xe3, 0x0b, 0x6a, 0xa5, 0x82, 0xdd, 0x8d,
+	0xb6, 0xa6, 0x59, 0x45, 0xe0, 0x8d, 0x2d, 0x76
+    };
+
+    lpc_string_putval(retval,
+		      lpc_string_new(lpc_frame_dataspace(f), basepoint, 32));
+}
+
 static char xed25519_sign_proto[] = { LPC_TYPE_STRING, LPC_TYPE_STRING,
 				      LPC_TYPE_STRING, 0 };
 static char xed25519_verify_proto[] = { LPC_TYPE_INT, LPC_TYPE_STRING,
@@ -714,7 +731,7 @@ static char xed25519_verify_proto[] = { LPC_TYPE_INT, LPC_TYPE_STRING,
 static char r255_bin_proto[] = { LPC_TYPE_STRING, LPC_TYPE_STRING,
 				 LPC_TYPE_STRING, 0 };
 static char r255_mon_proto[] = { LPC_TYPE_STRING, LPC_TYPE_STRING, 0 };
-static char r255_identity_proto[] = { LPC_TYPE_STRING, 0 };
+static char r255_point_proto[] = { LPC_TYPE_STRING, 0 };
 
 static LPC_ext_kfun kf[] = {
     { "encrypt XEd25519 sign", xed25519_sign_proto, xed25519_sign },
@@ -724,7 +741,8 @@ static LPC_ext_kfun kf[] = {
     { "ristretto255_neg", r255_mon_proto, r255_neg },
     { "ristretto255_mult", r255_bin_proto, r255_mult },
     { "ristretto255_map", r255_mon_proto, r255_map },
-    { "ristretto255_identity", r255_identity_proto, r255_identity }
+    { "ristretto255_identity", r255_point_proto, r255_identity },
+    { "ristretto255_basepoint", r255_point_proto, r255_basepoint }
 };
 
 int lpc_ext_init(int major, int minor, const char *config)
