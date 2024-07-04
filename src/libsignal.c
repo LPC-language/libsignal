@@ -507,6 +507,7 @@ static void xed25519_sign(LPC_frame f, int nargs, LPC_value retval)
 	lpc_runtime_error(f, "Bad argument 3 for kfun encrypt");
     }
     message = lpc_string_getval(val);
+    lpc_runtime_check(f, 256);
 
     signature = lpc_string_new(lpc_frame_dataspace(f), NULL, 64);
     RAND_bytes(rand, 64);
@@ -549,6 +550,7 @@ static void xed25519_verify(LPC_frame f, int nargs, LPC_value retval)
 	lpc_runtime_error(f, "Bad argument 4 for kfun decrypt");
     }
     message = lpc_string_getval(val);
+    lpc_runtime_check(f, 256);
 
     lpc_int_putval(retval,
 		   xeddsa_verify(lpc_string_text(key),
@@ -579,6 +581,7 @@ static void r255_add(LPC_frame f, int nargs, LPC_value retval)
     if (lpc_string_length(str) != 32 || !decode(&B, lpc_string_text(str))) {
 	lpc_runtime_error(f, "Bad argument 2 for kfun ristretto255_add");
     }
+    lpc_runtime_check(f, 512);
 
     ge_p3_to_cached(&C, &B);
     ge_add(&R, &A, &C);
@@ -611,6 +614,7 @@ static void r255_sub(LPC_frame f, int nargs, LPC_value retval)
     if (lpc_string_length(str) != 32 || !decode(&B, lpc_string_text(str))) {
 	lpc_runtime_error(f, "Bad argument 2 for kfun ristretto255_sub");
     }
+    lpc_runtime_check(f, 512);
 
     ge_p3_to_cached(&C, &B);
     ge_sub(&R, &A, &C);
@@ -636,6 +640,7 @@ static void r255_neg(LPC_frame f, int nargs, LPC_value retval)
     if (lpc_string_length(str) != 32 || !decode(&A, lpc_string_text(str))) {
 	lpc_runtime_error(f, "Bad argument 1 for kfun ristretto255_neg");
     }
+    lpc_runtime_check(f, 256);
 
     fe_neg(A.X, A.X);
     fe_neg(A.T, A.T);
@@ -665,6 +670,7 @@ static void r255_mult(LPC_frame f, int nargs, LPC_value retval)
     if (lpc_string_length(str) != 32) {
 	lpc_runtime_error(f, "Bad argument 2 for kfun ristretto255_mult");
     }
+    lpc_runtime_check(f, 512);
 
     mult(&A, &A, lpc_string_text(str));
     encode(buffer, &A);
@@ -688,6 +694,7 @@ static void r255_map(LPC_frame f, int nargs, LPC_value retval)
     if (lpc_string_length(str) != 32) {
 	lpc_runtime_error(f, "Bad argument 1 for kfun ristretto255_map");
     }
+    lpc_runtime_check(f, 512);
 
     elligator_map(&A, lpc_string_text(str));
     encode(buffer, &A);
@@ -703,6 +710,7 @@ static void r255_identity(LPC_frame f, int nargs, LPC_value retval)
 {
     static const char identity[32];	/* zeroes */
 
+    lpc_runtime_check(f, 2);
     lpc_string_putval(retval,
 		      lpc_string_new(lpc_frame_dataspace(f), identity, 32));
 }
@@ -720,6 +728,7 @@ static void r255_basepoint(LPC_frame f, int nargs, LPC_value retval)
 	0xb6, 0xa6, 0x59, 0x45, 0xe0, 0x8d, 0x2d, 0x76
     };
 
+    lpc_runtime_check(f, 2);
     lpc_string_putval(retval,
 		      lpc_string_new(lpc_frame_dataspace(f), basepoint, 32));
 }
