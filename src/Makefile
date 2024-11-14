@@ -1,7 +1,7 @@
 #
 # Makefile for libsignal extension module
 #
-EXT=1.4
+EXT=1.5
 EXTDIR=../../lpc-ext
 DEFINES=			# -DLARGENUM
 CCFLAGS=$(DEFINES) -O2
